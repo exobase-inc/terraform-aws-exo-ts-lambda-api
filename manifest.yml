@@ -1,0 +1,8 @@
+
+inputs:
+  envars:
+    type: envars
+
+build:
+  before: cd source && yarn && yarn build
+  # after: yarn clean
