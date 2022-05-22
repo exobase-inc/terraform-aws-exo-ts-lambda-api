@@ -120,7 +120,13 @@ module "lambda" {
   create_role    = false
   create_package = false
   runtime        = "nodejs14.x"
-  environment_variables = merge(local.envvars, {
+  # environment_variables = merge(local.envvars, {
+  #   EXO_MODULE   = each.value.module
+  #   EXO_FUNCTION = each.value.function
+  # })
+  environment_variables = merge([for ev in local.envvars : {
+    "${ev.name}": ev.value
+  }], {
     EXO_MODULE   = each.value.module
     EXO_FUNCTION = each.value.function
   })

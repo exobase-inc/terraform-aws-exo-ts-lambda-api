@@ -6,6 +6,8 @@
 source
 .terraform.lock.hcl
 
+state.tf
+
 # misc
 **/.DS_Store
 **/*.pem

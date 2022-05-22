@@ -20,7 +20,7 @@ variable "region" {
 
 variable "envvars" {
   type = string
-  default = "{}"
+  default = "[]"
 }
 
 
@@ -30,8 +30,4 @@ variable "envvars" {
 
 variable "exo_context" {
   type = string // json:DeploymentContext
-}
-
-variable "exo_profile" {
-  type = string
 }

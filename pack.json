@@ -3,8 +3,8 @@
   "service": "lambda",
   "language": "ts",
   "inputs": {
-    "envars": {
-      "type": "envars"
+    "envvars": {
+      "ui": "envars"
     }
   },
   "build": {
