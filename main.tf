@@ -124,9 +124,7 @@ module "lambda" {
   #   EXO_MODULE   = each.value.module
   #   EXO_FUNCTION = each.value.function
   # })
-  environment_variables = merge(tomap([for ev in local.envvars : {
-    "${ev.name}": ev.value
-  }]), {
+  environment_variables = merge({ for ev in local.envvars : "${ev.name}" => ev.value }, {
     EXO_MODULE   = each.value.module
     EXO_FUNCTION = each.value.function
   })
