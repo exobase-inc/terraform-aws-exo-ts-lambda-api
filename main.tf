@@ -25,7 +25,7 @@ locals {
   functions   = jsondecode(file("${local.source_dir}/.manifest.json")).functions
   envvars     = jsondecode(var.envvars)
   context     = jsondecode(var.exo_context)
-  service_key = join("-", split(" ", lower(replace(local.context.service.name, "[^\\w\\d]|_", ""))))
+  service_key = join("-", split(" ", lower(replace(local.context.unit.name, "[^\\w\\d]|_", ""))))
 }
 
 
