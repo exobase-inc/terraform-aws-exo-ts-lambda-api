@@ -4,7 +4,8 @@
   "language": "ts",
   "inputs": {
     "envvars": {
-      "ui": "envars"
+      "ui": "envars",
+      "label": "Environment Variables"
     }
   },
   "build": {

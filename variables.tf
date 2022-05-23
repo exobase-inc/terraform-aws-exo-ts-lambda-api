@@ -31,3 +31,7 @@ variable "envvars" {
 variable "exo_context" {
   type = string // json:DeploymentContext
 }
+
+variable "exo_source" {
+  type = string // path to source
+}

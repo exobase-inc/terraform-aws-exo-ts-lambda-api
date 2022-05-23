@@ -20,7 +20,7 @@ data "aws_caller_identity" "current" {}
 ## LOCALS
 ##
 locals {
-  source_dir  = "${path.module}/source" // really "${path.cwd}/source"
+  source_dir  = var.exo_source
   dist_dir    = "${local.source_dir}/build"
   functions   = jsondecode(file("${local.source_dir}/.manifest.json")).functions
   envvars     = jsondecode(var.envvars)
@@ -87,12 +87,20 @@ resource "aws_s3_bucket_acl" "zips" {
   acl    = "private"
 }
 
+data "archive_file" "zips" {
+  for_each = { for func in local.functions : "${func.module}_${func.function}" => func }
+  type        = "zip"
+  output_file_mode = "0666"
+  source_file = "${local.dist_dir}/modules/${each.value.module}/${each.value.function}.js"
+  output_path = "${local.dist_dir}/modules/${each.value.module}/${each.value.function}.zip"
+}
+
 resource "aws_s3_object" "zips" {
   for_each = { for func in local.functions : "${func.module}_${func.function}" => func }
   bucket = aws_s3_bucket.zips.bucket
   key    = "${each.value.module}_${each.value.function}.zip"
-  source = "${local.dist_dir}/modules/${each.value.module}/${each.value.function}.zip"
-  etag   = filemd5("${local.dist_dir}/modules/${each.value.module}/${each.value.function}.zip")
+  source = data.archive_file.zips[each.key].output_path
+  etag   = data.archive_file.zips[each.key].output_md5
 }
 
 
@@ -120,10 +128,6 @@ module "lambda" {
   create_role    = false
   create_package = false
   runtime        = "nodejs14.x"
-  # environment_variables = merge(local.envvars, {
-  #   EXO_MODULE   = each.value.module
-  #   EXO_FUNCTION = each.value.function
-  # })
   environment_variables = merge({ for ev in local.envvars : "${ev.name}" => ev.value }, {
     EXO_MODULE   = each.value.module
     EXO_FUNCTION = each.value.function
