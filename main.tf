@@ -90,7 +90,7 @@ resource "aws_s3_bucket_acl" "zips" {
 data "archive_file" "zips" {
   for_each = { for func in local.functions : "${func.module}_${func.function}" => func }
   type        = "zip"
-  output_file_mode = "0666"
+  # output_file_mode = "0666"
   source_file = "${local.dist_dir}/modules/${each.value.module}/${each.value.function}.js"
   output_path = "${local.dist_dir}/modules/${each.value.module}/${each.value.function}.zip"
 }
@@ -118,10 +118,11 @@ module "lambda" {
   timeout        = var.timeout
   memory_size    = var.memory
   
-  s3_existing_package = {
-    bucket = aws_s3_bucket.zips.bucket
-    key    = aws_s3_object.zips[each.key].key
-  }
+  local_existing_package = archive_file.zips[each.key].output_path
+  # s3_existing_package = {
+  #   bucket = aws_s3_bucket.zips.bucket
+  #   key    = aws_s3_object.zips[each.key].key
+  # }
 
   tracing_mode   = "Active"
   lambda_role    = aws_iam_role.lambda_role.arn
