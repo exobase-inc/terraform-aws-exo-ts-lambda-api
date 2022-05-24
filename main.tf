@@ -118,7 +118,7 @@ module "lambda" {
   timeout        = var.timeout
   memory_size    = var.memory
   
-  local_existing_package = archive_file.zips[each.key].output_path
+  local_existing_package = data.archive_file.zips[each.key].output_path
   # s3_existing_package = {
   #   bucket = aws_s3_bucket.zips.bucket
   #   key    = aws_s3_object.zips[each.key].key
