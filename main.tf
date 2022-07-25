@@ -1,22 +1,5 @@
 
 ##
-## DATA
-##
-
-data "aws_caller_identity" "current" {}
-
-# data "aws_acm_certificate" "wildcard_domain" {
-#   domain   = "*.lunecard.com"
-#   statuses = ["ISSUED"]
-# }
-
-# data "aws_route53_zone" "main" {
-#   name         = "lunecard.com."
-#   private_zone = false
-# }
-
-
-##
 ## LOCALS
 ##
 locals {
@@ -25,6 +8,26 @@ locals {
   envvars     = jsondecode(var.envvars)
   context     = jsondecode(var.exo_context)
   service_key = join("-", split(" ", lower(replace(local.context.unit.name, "[^\\w\\d]|_", ""))))
+  domain      = local.context.unit.domain // null | { domain, subdomain, fqd }
+}
+
+
+##
+## DATA
+##
+
+data "aws_caller_identity" "current" {}
+
+data "aws_acm_certificate" "wildcard_domain" {
+  count    = local.domain ? 1 : 0
+  domain   = "*.${local.domain.domain}"
+  statuses = ["ISSUED"]
+}
+
+data "aws_route53_zone" "main" {
+  count        = local.domain ? 1 : 0
+  name         = "${local.domain.domain}."
+  private_zone = false
 }
 
 
@@ -44,47 +47,40 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
-# resource "aws_apigatewayv2_domain_name" "main" {
-#   domain_name = local.domain
-#   domain_name_configuration {
-#     certificate_arn = data.aws_acm_certificate.wildcard_domain.arn
-#     endpoint_type   = "REGIONAL"
-#     security_policy = "TLS_1_2"
-#   }
-# }
+resource "aws_apigatewayv2_domain_name" "main" {
+  count        = local.domain ? 1 : 0
+  domain_name  = local.domain.fqd ? local.domain.fqd : local.domain.domain
+  domain_name_configuration {
+    certificate_arn = data.aws_acm_certificate.wildcard_domain[0].arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+}
 
-# resource "aws_apigatewayv2_api_mapping" "main" {
-#   # count = var.cloudflare ? 1 : 0
-#   api_id      = aws_apigatewayv2_api.api.id
-#   domain_name = aws_apigatewayv2_domain_name.main.id
-#   stage       = aws_apigatewayv2_stage.default.id
-# }
+resource "aws_apigatewayv2_api_mapping" "main" {
+  count       = local.domain ? 1 : 0
+  api_id      = aws_apigatewayv2_api.api.id
+  domain_name = aws_apigatewayv2_domain_name.main[0].id
+  stage       = aws_apigatewayv2_stage.default.id
+}
 
-# resource "aws_route53_record" "main" {
-#   name    = aws_apigatewayv2_domain_name.main.domain_name
-#   type    = "A"
-#   zone_id = data.aws_route53_zone.main.zone_id
+resource "aws_route53_record" "main" {
+  count   = local.domain ? 1 : 0
+  name    = aws_apigatewayv2_domain_name.main[0].domain_name
+  type    = "A"
+  zone_id = data.aws_route53_zone.main[0].zone_id
 
-#   alias {
-#     name                   = aws_apigatewayv2_domain_name.main.domain_name_configuration[0].target_domain_name
-#     zone_id                = aws_apigatewayv2_domain_name.main.domain_name_configuration[0].hosted_zone_id
-#     evaluate_target_health = false
-#   }
-# }
+  alias {
+    name                   = aws_apigatewayv2_domain_name.main[0].domain_name_configuration[0].target_domain_name
+    zone_id                = aws_apigatewayv2_domain_name.main[0].domain_name_configuration[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}
 
 
 ##
 ## S3 ARCHIVE
 ##
-
-# resource "aws_s3_bucket" "zips" {
-#   bucket = "${local.service_key}-zip-archives"
-# }
-
-# resource "aws_s3_bucket_acl" "zips" {
-#   bucket = aws_s3_bucket.zips.id
-#   acl    = "private"
-# }
 
 data "archive_file" "zips" {
   for_each = { for func in local.functions : func.source => func }
@@ -93,14 +89,6 @@ data "archive_file" "zips" {
   source_file = "${local.source_dir}/${each.value.source}"
   output_path = "${local.source_dir}/${replace(each.value.source, ".js", ".zip")}"
 }
-
-# resource "aws_s3_object" "zips" {
-#   for_each = { for func in local.functions : func.source => func }
-#   bucket   = aws_s3_bucket.zips.bucket
-#   key      = replace(replace(each.value.source, "/", "_"), ".js", ".zip")
-#   source   = data.archive_file.zips[each.key].output_path
-#   etag     = data.archive_file.zips[each.key].output_md5
-# }
 
 
 ##
