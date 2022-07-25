@@ -21,7 +21,6 @@ data "aws_caller_identity" "current" {}
 ##
 locals {
   source_dir  = var.exo_source
-  dist_dir    = "${local.source_dir}/build"
   functions   = jsondecode(file("${local.source_dir}/.manifest.json")).functions
   envvars     = jsondecode(var.envvars)
   context     = jsondecode(var.exo_context)
@@ -78,30 +77,30 @@ resource "aws_apigatewayv2_stage" "default" {
 ## S3 ARCHIVE
 ##
 
-resource "aws_s3_bucket" "zips" {
-  bucket = "${local.service_key}-zip-archives"
-}
+# resource "aws_s3_bucket" "zips" {
+#   bucket = "${local.service_key}-zip-archives"
+# }
 
-resource "aws_s3_bucket_acl" "zips" {
-  bucket = aws_s3_bucket.zips.id
-  acl    = "private"
-}
+# resource "aws_s3_bucket_acl" "zips" {
+#   bucket = aws_s3_bucket.zips.id
+#   acl    = "private"
+# }
 
 data "archive_file" "zips" {
-  for_each = { for func in local.functions : "${func.module}_${func.function}" => func }
-  type        = "zip"
+  for_each = { for func in local.functions : func.source => func }
+  type     = "zip"
   # output_file_mode = "0666"
-  source_file = "${local.dist_dir}/modules/${each.value.module}/${each.value.function}.js"
-  output_path = "${local.dist_dir}/modules/${each.value.module}/${each.value.function}.zip"
+  source_file = "${local.source_dir}/${each.value.source}"
+  output_path = "${local.source_dir}/${replace(each.value.source, ".js", ".zip")}"
 }
 
-resource "aws_s3_object" "zips" {
-  for_each = { for func in local.functions : "${func.module}_${func.function}" => func }
-  bucket = aws_s3_bucket.zips.bucket
-  key    = "${each.value.module}_${each.value.function}.zip"
-  source = data.archive_file.zips[each.key].output_path
-  etag   = data.archive_file.zips[each.key].output_md5
-}
+# resource "aws_s3_object" "zips" {
+#   for_each = { for func in local.functions : func.source => func }
+#   bucket   = aws_s3_bucket.zips.bucket
+#   key      = replace(replace(each.value.source, "/", "_"), ".js", ".zip")
+#   source   = data.archive_file.zips[each.key].output_path
+#   etag     = data.archive_file.zips[each.key].output_md5
+# }
 
 
 ##
@@ -111,32 +110,29 @@ resource "aws_s3_object" "zips" {
 module "lambda" {
   source = "git::https://git@github.com/terraform-aws-modules/terraform-aws-lambda.git?ref=v3.2.0"
 
-  for_each = { for func in local.functions : "${func.module}_${func.function}" => func }
+  for_each = { for func in local.functions : func.source => func }
 
-  function_name  = "${local.service_key}-api-${each.value.module}-${each.value.function}"
-  handler        = "${each.value.function}.default"
-  timeout        = var.timeout
-  memory_size    = var.memory
-  
+  function_name = "${local.service_key}-api-${replace(replace(each.value.source, "/", "_"), ".js", ".zip")}"
+  handler       = "${replace(replace(each.value.source, ".+/", ""), ".js", "")}.default"
+  timeout       = var.timeout
+  memory_size   = var.memory
+
   local_existing_package = data.archive_file.zips[each.key].output_path
   # s3_existing_package = {
   #   bucket = aws_s3_bucket.zips.bucket
   #   key    = aws_s3_object.zips[each.key].key
   # }
 
-  tracing_mode   = "Active"
-  lambda_role    = aws_iam_role.lambda_role.arn
-  create_role    = false
-  create_package = false
-  runtime        = "nodejs14.x"
-  environment_variables = merge({ for ev in local.envvars : "${ev.name}" => ev.value }, {
-    EXO_MODULE   = each.value.module
-    EXO_FUNCTION = each.value.function
-  })
+  tracing_mode          = "Active"
+  lambda_role           = aws_iam_role.lambda_role.arn
+  create_role           = false
+  create_package        = false
+  runtime               = "nodejs14.x"
+  environment_variables = local.envvars
 
-  depends_on = [
-    aws_s3_object.zips
-  ]
+  # depends_on = [
+  #   aws_s3_object.zips
+  # ]
 }
 
 
@@ -146,16 +142,16 @@ module "lambda" {
 
 resource "aws_apigatewayv2_route" "main" {
 
-  for_each = { for func in local.functions : "${func.module}_${func.function}" => func }
+  for_each = { for func in local.functions : func.source => func }
 
   api_id    = aws_apigatewayv2_api.api.id
-  route_key = "ANY /${each.value.module}/${each.value.function}"
+  route_key = "ANY ${each.value.url}"
   target    = "integrations/${aws_apigatewayv2_integration.main[each.key].id}"
 }
 
 resource "aws_apigatewayv2_integration" "main" {
 
-  for_each = { for func in local.functions : "${func.module}_${func.function}" => func }
+  for_each = { for func in local.functions : func.source => func }
 
   api_id                 = aws_apigatewayv2_api.api.id
   integration_type       = "AWS_PROXY"
@@ -177,7 +173,7 @@ resource "aws_apigatewayv2_integration" "main" {
 
 resource "aws_lambda_permission" "apigw" {
 
-  for_each = { for func in local.functions : "${func.module}_${func.function}" => func }
+  for_each = { for func in local.functions : func.source => func }
 
   statement_id = "AllowAPIGatewayInvoke"
   action       = "lambda:InvokeFunction"
